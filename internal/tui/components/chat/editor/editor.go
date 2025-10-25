@@ -311,6 +311,18 @@ func (m *editorCmp) Update(msg tea.Msg) (util.Model, tea.Cmd) {
 			m.textarea.InsertRune('\n')
 			cmds = append(cmds, util.CmdHandler(completions.CloseCompletionsMsg{}))
 		}
+		// Handle up arrow for history
+		if key.Matches(msg, m.keyMap.LastMessage) && m.textarea.Focused() {
+			// Only fill history if current input is empty
+			if m.textarea.Value() == "" {
+				// Get the last user message from history
+				if lastUserMsg := m.getLastUserMessage(); lastUserMsg != "" {
+					m.textarea.SetValue(lastUserMsg)
+					m.textarea.MoveToEnd()
+					return m, tea.Batch(cmds...)
+				}
+			}
+		}
 		// Handle Enter key
 		if m.textarea.Focused() && key.Matches(msg, m.keyMap.SendMessage) {
 			value := m.textarea.Value()
@@ -478,6 +490,26 @@ func (m *editorCmp) SetPosition(x, y int) tea.Cmd {
 	m.x = x
 	m.y = y
 	return nil
+}
+
+func (m *editorCmp) getLastUserMessage() string {
+	if m.session.ID == "" || m.app.Messages == nil {
+		return ""
+	}
+
+	messages, err := m.app.Messages.List(context.Background(), m.session.ID)
+	if err != nil || len(messages) == 0 {
+		return ""
+	}
+
+	// Find the most recent user message
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == message.User && messages[i].Content().Text != "" {
+			return messages[i].Content().Text
+		}
+	}
+
+	return ""
 }
 
 func (m *editorCmp) startCompletions() tea.Msg {
